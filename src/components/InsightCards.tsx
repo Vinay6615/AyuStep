@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { AlertCircle, TrendingUp, ShieldAlert, Footprints, Layers, Zap } from 'lucide-react';
 import { insights } from '@/src/constants';
 import { cn } from '@/src/lib/utils';
+import GaitPredictionPanel from './GaitPredictionPanel';
 
 const iconMap: Record<string, any> = {
   'Heel region': AlertCircle,
@@ -23,6 +24,10 @@ export default function InsightCards() {
           <p className="text-xl text-gray-500 max-w-2xl font-light">
             Raw sensor data is translated into plain-language clinical observations a clinician or patient can act on.
           </p>
+        </div>
+
+        <div className="mb-24">
+          <GaitPredictionPanel />
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

@@ -13,6 +13,7 @@ import { FileDown, Loader2 } from 'lucide-react';
 import { gaitData } from '@/src/constants';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import SensorGrid from './SensorGrid';
 
 const HeatmapFoot = ({ side }: { side: 'left' | 'right' }) => (
   <div className="relative flex flex-col items-center">
@@ -48,27 +49,27 @@ const HeatmapFoot = ({ side }: { side: 'left' | 'right' }) => (
       />
       
       {/* Grid of dots */}
-      <div className="grid grid-cols-4 grid-rows-10 gap-2 opacity-20">
+      <div className="grid grid-cols-4 grid-rows-10 gap-2 opacity-30">
         {[...Array(40)].map((_, i) => (
           <motion.div 
             key={i} 
             animate={{ 
-              opacity: [0.15, 0.45, 0.15],
-              scale: [1, 1.15, 1],
-              backgroundColor: ['#8B5CF6', '#C084FC', '#8B5CF6'],
+              opacity: [0.1, 0.6, 0.1],
+              scale: [1, 1.3, 1],
+              backgroundColor: ['#A78BFA', '#8B5CF6', '#A78BFA'],
               boxShadow: [
                 '0 0 0px rgba(139, 92, 246, 0)',
-                '0 0 4px rgba(192, 132, 252, 0.4)',
+                '0 0 6px rgba(139, 92, 246, 0.5)',
                 '0 0 0px rgba(139, 92, 246, 0)'
               ]
             }}
             transition={{ 
-              duration: 3.5 + Math.random() * 3, 
+              duration: 2.5 + Math.random() * 5, 
               repeat: Infinity, 
-              ease: "easeInOut",
+              ease: [0.4, 0, 0.6, 1],
               delay: Math.random() * 5 
             }}
-            className="w-1 h-1 rounded-full" 
+            className="w-1 h-1 rounded-full cursor-pointer" 
           />
         ))}
       </div>
@@ -109,35 +110,86 @@ export default function AnalysisDashboard() {
         backgroundColor: '#FAFAFA',
         logging: false,
         onclone: (clonedDoc) => {
-          // Fix for oklch/oklab colors that html2canvas cannot parse
+          // Robust sanitization for problematic CSS color functions
+          const oklRegex = /okl(ch|ab)\s*\([^)]+?\)/gi;
+          const fallbackHex = '#71717a';
+
+          const sanitizeString = (str: string) => {
+            if (!str) return str;
+            return str.replace(oklRegex, fallbackHex);
+          };
+
+          // 1. Sanitize all style tags in the head and body
+          const styleTags = clonedDoc.querySelectorAll('style');
+          styleTags.forEach(tag => {
+            if (tag.innerHTML) {
+              tag.innerHTML = sanitizeString(tag.innerHTML);
+            }
+          });
+
+          // 2. Deep sanitize all elements
+          const allElements = clonedDoc.querySelectorAll('*');
+          allElements.forEach((el) => {
+            const htmlEl = el as HTMLElement;
+            
+            // Clean up inline styles
+            if (htmlEl.style && htmlEl.style.cssText) {
+              htmlEl.style.cssText = sanitizeString(htmlEl.style.cssText);
+            }
+
+            // Clean up SVG attributes
+            ['fill', 'stroke', 'stop-color', 'color'].forEach(attr => {
+              const val = htmlEl.getAttribute(attr);
+              if (val && val.match(oklRegex)) {
+                htmlEl.setAttribute(attr, fallbackHex);
+              }
+            });
+
+            // Handle svg filters and backdrop filters specifically
+            if (htmlEl.tagName === 'svg' || htmlEl.closest('svg')) {
+              htmlEl.style.filter = 'none';
+            }
+
+            // Force computed styles that might still be problematic
+            try {
+              // Note: We use the property name as seen by getComputedStyle
+              const style = window.getComputedStyle(htmlEl);
+              ['color', 'background-color', 'border-color', 'fill', 'stroke'].forEach(prop => {
+                const val = style.getPropertyValue(prop);
+                if (val && (val.includes('oklch') || val.includes('oklab'))) {
+                  htmlEl.style.setProperty(prop, prop === 'color' ? '#111827' : '#ffffff', 'important');
+                }
+              });
+            } catch (e) {}
+          });
+
+          // 3. Inject global overrides to ensure clean capture
           const styles = clonedDoc.createElement('style');
           styles.innerHTML = `
             * {
               color-scheme: light !important;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+              backdrop-filter: none !important;
+              filter: none !important;
+              transition: none !important;
+              animation: none !important;
+              box-shadow: none !important;
             }
-            /* Force hex/rgb for common elements to avoid oklch/oklab parsing errors */
             .glass-panel {
               background-color: rgba(255, 255, 255, 0.7) !important;
               border-color: rgba(255, 255, 255, 0.2) !important;
-              backdrop-filter: none !important;
             }
-            /* Ensure animations are cleared */
-            .animate-pulse, .animate-ping, .animate-spin {
-              animation: none !important;
+            .animate-pulse, .animate-ping, .animate-spin, [class*="blur-"], .blur-xl {
+              display: none !important;
+            }
+            /* Force hide any remaining elements with oklch in background-image (like gradients) */
+            [style*="oklch"], [style*="oklab"] {
+              background-image: none !important;
+              background-color: ${fallbackHex} !important;
             }
           `;
           clonedDoc.head.appendChild(styles);
-          
-          // Recursively find and fix any elements that might still have oklab/oklch in their computed styles
-          // or just hide the problematic decorative elements
-          const animatedElements = clonedDoc.querySelectorAll('.animate-pulse, .animate-ping');
-          animatedElements.forEach(el => {
-            (el as HTMLElement).style.display = 'none';
-          });
-          
-          // Hide the live scan line during export as it uses gradients/blur that might be problematic
-          const scanLine = clonedDoc.querySelector('.bg-brand-purple\\/20.blur-\\[2px\\]');
-          if (scanLine) (scanLine as HTMLElement).style.display = 'none';
         }
       });
       
@@ -318,6 +370,8 @@ export default function AnalysisDashboard() {
             </div>
           </motion.div>
         </div>
+
+        <SensorGrid />
       </div>
     </section>
   );
